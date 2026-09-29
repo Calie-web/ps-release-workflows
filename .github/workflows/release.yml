@@ -82,7 +82,7 @@ jobs:
           echo "Release tag: $TAG"
 
       - name: Verify version matches the tag
-        run: php .release-kit/verify_version.php "${{ inputs.module_dir }}" "${{ steps.ver.outputs.tag }}"
+        run: php .release-kit/verify_version.php "${{ inputs.module_dir }}" "${{ steps.ver.outputs.tag }}" "${{ inputs.release_json }}"
 
       - name: Run tests (if any)
         run: |

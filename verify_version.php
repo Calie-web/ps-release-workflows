@@ -1,20 +1,35 @@
 <?php
 /**
  * Fails the build unless git tag == $this->version == config.xml <version>.
- * Usage: php verify_version.php <moduleDir> <tag>
+ * Usage: php verify_version.php <moduleDir> <tag> [release.json]
+ *
+ * The module's technical name comes from release.json ("module") when available,
+ * so it works when the module sits at the repo root (moduleDir ".") and the repo
+ * is named differently from the module.
  */
 
 declare(strict_types=1);
 
 require __DIR__ . '/lib.php';
 
-[$self, $moduleDir, $tag] = array_pad($argv, 3, null);
+[$self, $moduleDir, $tag, $releaseJson] = array_pad($argv, 4, null);
 if ($moduleDir === null || $tag === null) {
-    fwrite(STDERR, "Usage: php verify_version.php <moduleDir> <tag>\n");
+    fwrite(STDERR, "Usage: php verify_version.php <moduleDir> <tag> [release.json]\n");
     exit(2);
 }
 
-$module = basename(rtrim($moduleDir, '/'));
+$module = null;
+$rjPath = $releaseJson ?: rtrim($moduleDir, '/') . '/release.json';
+if (is_file($rjPath)) {
+    $rj = json_decode((string) file_get_contents($rjPath), true);
+    if (is_array($rj) && !empty($rj['module']) && is_string($rj['module'])) {
+        $module = $rj['module'];
+    }
+}
+if ($module === null) {
+    $resolved = realpath($moduleDir);
+    $module = basename($resolved !== false ? $resolved : rtrim($moduleDir, '/'));
+}
 $tagVersion = tpu_normalize_tag($tag);
 
 try {
