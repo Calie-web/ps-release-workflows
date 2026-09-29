@@ -1,0 +1,107 @@
+# Reusable release workflow for ThoumProduction PrestaShop modules.
+#
+# Host this file at .github/workflows/release.yml in your shared workflows repo
+# (e.g. Calie-web/ps-release-workflows), together with the release-kit
+# scripts (lib.php, build.php, sign.php, verify_version.php) at that repo's root.
+# Each module then calls it (see caller.yml) on a v* tag.
+#
+# SECURITY: pin every third-party action to a full commit SHA (shown as @<sha>).
+# Store the Ed25519 signing key ONLY as the org/repo secret TPU_SIGNING_KEY;
+# never commit it. Protect the release environment with required reviewers.
+
+on:
+  workflow_call:
+    inputs:
+      module_dir:
+        type: string
+        default: '.'
+      php_version:
+        type: string
+        default: '8.1'
+      release_json:
+        type: string
+        default: 'release.json'
+      workflows_repo:
+        type: string
+        default: 'Calie-web/ps-release-workflows'
+    secrets:
+      TPU_SIGNING_KEY:
+        required: true
+
+permissions:
+  contents: write        # create the GitHub Release
+  id-token: write        # provenance attestation
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release   # gate with required reviewers for supply-chain safety
+    steps:
+      - name: Checkout module
+        uses: actions/checkout@v4          # TODO pin: actions/checkout@<sha>
+
+      - name: Checkout release-kit
+        uses: actions/checkout@v4          # TODO pin
+        with:
+          repository: ${{ inputs.workflows_repo }}
+          path: .release-kit
+          ref: main
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2     # TODO pin
+        with:
+          php-version: ${{ inputs.php_version }}
+          extensions: json, zip, sodium, hash
+          tools: composer:v2
+
+      - name: Validate composer.json
+        run: '[ -f composer.json ] && composer validate --strict || echo "no composer.json"'
+
+      - name: Security audit
+        run: '[ -f composer.json ] && composer audit || echo "skip audit"'
+
+      - name: PHP syntax check
+        run: find "${{ inputs.module_dir }}" -path '*/vendor/*' -prune -o -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+
+      - name: Verify version matches the tag
+        run: php .release-kit/verify_version.php "${{ inputs.module_dir }}" "${{ github.ref_name }}"
+
+      - name: Run tests (if any)
+        run: |
+          if [ -f composer.json ]; then composer install --no-interaction --no-progress; fi
+          if [ -f vendor/bin/phpunit ] && ([ -f phpunit.xml ] || [ -f phpunit.xml.dist ]); then
+            vendor/bin/phpunit --colors=never
+          else
+            echo "no tests"
+          fi
+
+      - name: Install production dependencies
+        run: '[ -f composer.json ] && composer install --no-dev --optimize-autoloader --no-interaction --no-progress || echo "no composer.json"'
+
+      - name: Build package + metadata
+        env:
+          TAG: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          SOURCE_DATE_EPOCH: '1700000000'
+        run: php .release-kit/build.php "${{ inputs.module_dir }}" "${{ inputs.release_json }}" dist
+
+      - name: Sign metadata (Ed25519)
+        env:
+          TPU_SIGNING_KEY: ${{ secrets.TPU_SIGNING_KEY }}
+        run: php .release-kit/sign.php dist/metadata.json dist/metadata.json.sig
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1   # TODO pin
+        with:
+          subject-path: 'dist/*.zip'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2       # TODO pin
+        with:
+          files: |
+            dist/*.zip
+            dist/metadata.json
+            dist/metadata.json.sig
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true

@@ -1,0 +1,16 @@
+# Per-module caller workflow. Place at .github/workflows/release.yml in each
+# module repo. Publishing a semver tag triggers a signed GitHub Release.
+#
+#   git tag v1.2.0 && git push origin v1.2.0
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+jobs:
+  release:
+    uses: Calie-web/ps-release-workflows/.github/workflows/release.yml@main
+    with:
+      php_version: '8.1'
+      release_json: 'release.json'
+    secrets:
+      TPU_SIGNING_KEY: ${{ secrets.TPU_SIGNING_KEY }}

@@ -1,0 +1,23 @@
+{
+    "module": "cw_blog",
+    "channel": null,
+    "prestashop": {
+        "min": "8.0.0",
+        "max": "8.99.99"
+    },
+    "php": {
+        "min": "8.1",
+        "max": "8.4"
+    },
+    "requires": {
+        "modules": {},
+        "php_ext": []
+    },
+    "min_updater_version": "1.0.0",
+    "db_migrations": false,
+    "db_backward_compatible": true,
+    "touches_overrides": false,
+    "changelog": "",
+    "exclude": [],
+    "keep": []
+}
